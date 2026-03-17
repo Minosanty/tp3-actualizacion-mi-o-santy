@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Registro de Alumnos</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            background-color: #f0f0f0;
+            text-align: center;
+            padding: 20px;
+        }
+
+        input {
+            padding: 8px;
+            margin: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            padding: 10px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 60%;
+            margin: auto;
+            background: white;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>📚 Registro de Alumnos</h2>
+
+    <input type="text" id="nombre" placeholder="Nombre">
+    <input type="number" id="edad" placeholder="Edad">
+    <input type="number" id="nota" placeholder="Nota">
+
+    <br>
+
+    <button onclick="agregarAlumno()">Agregar</button>
+    <button onclick="borrarTodo()">Borrar todo</button>
+
+    <h3>Lista de alumnos (ordenados por nota)</h3>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Edad</th>
+                <th>Nota</th>
+                <th>Acción</th>
+            </tr>
+        </thead>
+        <tbody id="tablaAlumnos"></tbody>
+    </table>
+
+    <h3 id="promedio"></h3>
+
+    <script>
+        let alumnos = JSON.parse(localStorage.getItem("alumnos")) || [];
+
+        function guardarDatos() {
+            localStorage.setItem("alumnos", JSON.stringify(alumnos));
+        }
+
+        function mostrarAlumnos() {
+            const tabla = document.getElementById("tablaAlumnos");
+            const promedioTexto = document.getElementById("promedio");
+
+            tabla.innerHTML = "";
+
+            let suma = 0;
+
+            // 🔥 Ordenar de mayor a menor manteniendo índice original
+            let ordenados = alumnos
+                .map((alumno, index) => ({ ...alumno, indexOriginal: index }))
+                .sort((a, b) => b.nota - a.nota);
+
+            ordenados.forEach(alumno => {
+                const fila = document.createElement("tr");
+
+                fila.innerHTML = `
+                    <td>${alumno.nombre}</td>
+                    <td>${alumno.edad}</td>
+                    <td>${alumno.nota}</td>
+                    <td>
+                        <button onclick="eliminarAlumno(${alumno.indexOriginal})">Eliminar</button>
+                    </td>
+                `;
+
+                tabla.appendChild(fila);
+
+                suma += alumno.nota;
+            });
+
+            if (alumnos.length > 0) {
+                let promedio = suma / alumnos.length;
+                promedioTexto.textContent = "Promedio: " + promedio.toFixed(2);
+            } else {
+                promedioTexto.textContent = "";
+            }
+        }
+
+        function agregarAlumno() {
+            const nombre = document.getElementById("nombre").value;
+            const edad = document.getElementById("edad").value;
+            const nota = document.getElementById("nota").value;
+
+            if (nombre === "" || edad === "" || nota === "") {
+                alert("Completa todos los campos");
+                return;
+            }
+
+            const nuevoAlumno = {
+                nombre: nombre,
+                edad: parseInt(edad),
+                nota: parseFloat(nota)
+            };
+
+            alumnos.push(nuevoAlumno);
+
+            guardarDatos();
+            mostrarAlumnos();
+
+            document.getElementById("nombre").value = "";
+            document.getElementById("edad").value = "";
+            document.getElementById("nota").value = "";
+        }
+
+        function eliminarAlumno(index) {
+            alumnos.splice(index, 1);
+            guardarDatos();
+            mostrarAlumnos();
+        }
+
+        function borrarTodo() {
+            alumnos = [];
+            guardarDatos();
+            mostrarAlumnos();
+        }
+
+        mostrarAlumnos();
+    </script>
+
+</body>
+
+</html>

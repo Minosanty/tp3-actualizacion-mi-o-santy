@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Registro de Alumnos</title>
+
+    <style>
+        body {
+            font-family: Arial;
+            text-align: center;
+            background: #f0f0f0;
+        }
+
+        input,
+        button {
+            margin: 5px;
+            padding: 8px;
+        }
+
+        table {
+            margin: auto;
+            background: white;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 10px;
+        }
+
+        th {
+            background: green;
+            color: white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2>📚 Registro de Alumnos</h2>
+
+    <div id="loginArea">
+        <strong>Cargando IP de usuario...</strong>
+    </div>
+
+    <div id="appArea" style="display:none; margin-top: 20px;">
+        <div>
+            <strong>Usuario:</strong> <span id="usuarioActual"></span>
+            <button onclick="cerrarSesion()">Cerrar sesión</button>
+        </div>
+
+        <input id="nombre" placeholder="Nombre" />
+        <input id="edad" type="number" placeholder="Edad" />
+        <input id="nota" type="number" placeholder="Nota" />
+
+        <br />
+
+        <button onclick="agregarAlumno()">Agregar</button>
+
+        <table border="1" style="margin-top: 12px;">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Edad</th>
+                    <th>Nota</th>
+                    <th>Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tabla"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let alumnos = [];
+        let usuarioIP = "";
+
+        async function obtenerIPCliente() {
+            try {
+                const res = await fetch("/mi-ip");
+                if (!res.ok) throw new Error("No se pudo obtener la IP");
+
+                const data = await res.json();
+                usuarioIP = data.ip || "desconocido";
+
+                document.getElementById("usuarioActual").innerText = usuarioIP;
+                document.getElementById("loginArea").style.display = "none";
+                document.getElementById("appArea").style.display = "block";
+
+                cargarAlumnos();
+            } catch (error) {
+                document.getElementById("loginArea").innerHTML = "<strong>Error al detectar IP</strong>";
+                console.error(error);
+            }
+        }
+
+        async function cargarAlumnos() {
+            if (!usuarioIP) return;
+
+            const res = await fetch("/alumnos");
+            if (!res.ok) {
+                alert("Error al cargar alumnos");
+                return;
+            }
+
+            alumnos = await res.json();
+            mostrar();
+        }
+
+        function mostrar() {
+            const tabla = document.getElementById("tabla");
+            tabla.innerHTML = "";
+
+            const ordenados = alumnos
+                .map((a, i) => ({ ...a, i }))
+                .sort((a, b) => b.nota - a.nota);
+
+            ordenados.forEach((a) => {
+                tabla.innerHTML += `
+            <tr>
+                <td>${a.nombre}</td>
+                <td>${a.edad}</td>
+                <td>${a.nota}</td>
+                <td><button onclick="eliminar(${a.i})">Eliminar</button></td>
+            </tr>`;
+            });
+        }
+
+        async function agregarAlumno() {
+            if (!usuarioIP) {
+                alert("No se pudo obtener IP de usuario");
+                return;
+            }
+
+            const alumno = {
+                nombre: document.getElementById("nombre").value.trim(),
+                edad: parseInt(document.getElementById("edad").value, 10),
+                nota: parseFloat(document.getElementById("nota").value),
+            };
+
+            if (!alumno.nombre || isNaN(alumno.edad) || isNaN(alumno.nota)) {
+                alert("Completa todos los campos correctamente");
+                return;
+            }
+
+            const res = await fetch("/alumnos", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(alumno),
+            });
+
+            if (!res.ok) {
+                alert("No se pudo guardar el alumno");
+                return;
+            }
+
+            document.getElementById("nombre").value = "";
+            document.getElementById("edad").value = "";
+            document.getElementById("nota").value = "";
+
+            cargarAlumnos();
+        }
+
+        async function eliminar(i) {
+            if (!usuarioIP) return;
+
+            const res = await fetch(`/alumnos/${i}`, {
+                method: "DELETE",
+            });
+
+            if (!res.ok) {
+                alert("Error al eliminar alumno");
+                return;
+            }
+
+            cargarAlumnos();
+        }
+
+        obtenerIPCliente();
+    </script>
+
+</body>
+
+</html>
