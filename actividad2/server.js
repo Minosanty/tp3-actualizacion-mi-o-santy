@@ -2,167 +2,82 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = 3000;
-
-// 🔥 NORMALIZAR IP (IMPORTANTE)
-function obtenerIP(req) {
-  let ip = req.socket.remoteAddress;
-
-  if (!ip) return "desconocido";
-
-  if (ip === "::1") return "127.0.0.1";
-
-  if (ip.startsWith("::ffff:")) {
-    return ip.replace("::ffff:", "");
-  }
-
-  return ip;
-}
+// Base de datos en memoria organizada por IP
+const baseDeDatos = {};
 
 const server = http.createServer((req, res) => {
-  const ip = obtenerIP(req);
-  const usuario = ip;
+  // Obtener la IP del cliente
+  let ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+  // Limpiar formato de IP (especialmente en local que sale ::1 o ::ffff:)
+  if (ip === "::1") ip = "127.0.0.1";
+  if (ip.startsWith("::ffff:")) ip = ip.substring(7);
 
-  console.log("IP cliente:", ip, "Usuario:", usuario || "(sin usuario)");
-
-  // Función rápida para validar el usuario (IP)
-  function validarUsuario() {
-    if (!usuario) {
-      res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end("No se pudo obtener la IP del usuario");
-      return false;
-    }
-    return true;
-  }
-
-  // ===============================
-  // SERVIR HTML
-  // ===============================
+  // Servir archivos estáticos
   if (req.method === "GET" && req.url === "/") {
-    const filePath = path.join(__dirname, "public", "index.html");
-
-    fs.readFile(filePath, (err, data) => {
+    fs.readFile(path.join(__dirname, "index.html"), (err, data) => {
       if (err) {
         res.writeHead(500);
-        return res.end("Error al cargar la página");
+        return res.end("Error cargando index.html");
       }
-
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(data);
     });
   }
+  // API: Obtener datos de la IP
+  else if (req.method === "GET" && req.url === "/datos") {
+    const datosUsuario = baseDeDatos[ip] || [];
 
-  // ===============================
-  // OBTENER IP (LOGIN AUTOMÁTICO)
-  // ===============================
-  else if (req.method === "GET" && req.url === "/mi-ip") {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ip: ip }));
-  }
-
-  // ===============================
-  // OBTENER ALUMNOS DEL USUARIO
-  // ===============================
-  else if (req.method === "GET" && req.url.startsWith("/alumnos")) {
-    if (!validarUsuario()) return;
-
-    let data = {};
-
-    try {
-      data = JSON.parse(fs.readFileSync("alumnos.json", "utf8"));
-    } catch {
-      data = {};
+    // Calcular promedio
+    let promedio = 0;
+    if (datosUsuario.length > 0) {
+      const suma = datosUsuario.reduce((acc, p) => acc + p.nota, 0);
+      promedio = suma / datosUsuario.length;
     }
 
-    const alumnos = data[usuario] || [];
-
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(alumnos));
+    res.end(
+      JSON.stringify({ personas: datosUsuario, promedio: promedio.toFixed(2) }),
+    );
   }
-
-  // ===============================
-  // GUARDAR ALUMNO
-  // ===============================
-  else if (req.method === "POST" && req.url.startsWith("/alumnos")) {
-    if (!validarUsuario()) return;
-
+  // API: Guardar nuevo alumno
+  else if (req.method === "POST" && req.url === "/guardar") {
     let body = "";
-
     req.on("data", (chunk) => {
-      body += chunk;
+      body += chunk.toString();
     });
-
     req.on("end", () => {
-      let nuevoAlumno;
-
       try {
-        nuevoAlumno = JSON.parse(body);
-      } catch {
+        const nuevaPersona = JSON.parse(body);
+
+        // Inicializar lista para esta IP si no existe
+        if (!baseDeDatos[ip]) {
+          baseDeDatos[ip] = [];
+        }
+
+        // Guardar datos
+        baseDeDatos[ip].push({
+          nombre: nuevaPersona.nombre,
+          edad: parseInt(nuevaPersona.edad),
+          nota: parseFloat(nuevaPersona.nota),
+        });
+
+        res.writeHead(201, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
         res.writeHead(400);
-        return res.end("JSON inválido");
+        res.end("Error en los datos enviados");
       }
-
-      let data = {};
-
-      try {
-        data = JSON.parse(fs.readFileSync("alumnos.json", "utf8"));
-      } catch {
-        data = {};
-      }
-
-      if (!data[usuario]) {
-        data[usuario] = [];
-      }
-
-      data[usuario].push(nuevoAlumno);
-
-      fs.writeFileSync("alumnos.json", JSON.stringify(data, null, 2));
-
-      res.writeHead(200);
-      res.end("Alumno guardado");
     });
-  }
-
-  // ===============================
-  // ELIMINAR ALUMNO
-  // ===============================
-  else if (req.method === "DELETE" && req.url.startsWith("/alumnos/")) {
-    if (!validarUsuario()) return;
-
-    const index = parseInt(req.url.split("/")[2]);
-
-    let data = {};
-
-    try {
-      data = JSON.parse(fs.readFileSync("alumnos.json", "utf8"));
-    } catch {
-      data = {};
-    }
-
-    if (
-      data[usuario] &&
-      Number.isInteger(index) &&
-      index >= 0 &&
-      index < data[usuario].length
-    ) {
-      data[usuario].splice(index, 1);
-    }
-
-    fs.writeFileSync("alumnos.json", JSON.stringify(data, null, 2));
-
-    res.writeHead(200);
-    res.end("Alumno eliminado");
-  }
-
-  // ===============================
-  // RUTA NO ENCONTRADA
-  // ===============================
-  else {
+  } else {
     res.writeHead(404);
-    res.end("Ruta no encontrada");
+    res.end("No encontrado");
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+const PORT = 3300;
+const HOST = "0.0.0.0";
+
+server.listen(PORT, HOST, () => {
+  console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  console.log("Presiona Ctrl+C para detener");
 });
